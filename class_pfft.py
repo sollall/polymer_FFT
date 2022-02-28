@@ -2,6 +2,7 @@ import cmath
 import matplotlib.pyplot as plt
 import time
 
+#再現したい反応がないから改善するモチベ沸かない
 class Polymer_FFT:
     def __init__(self,mol_length,volume,temperture):
         #FFT用
@@ -20,9 +21,10 @@ class Polymer_FFT:
     def drop(self,monomer,init):#途中でモノマーラジカルを入れたりすることを考えるとinitで入れるよりこうした方いいかもしれない 開始剤とモノマーで関数分けたら？
         self.M[1]+=monomer
         self.init+=init
+        self.init_log=init
 
     def react(self,heatflow):
-        self.T+=0.1
+        self.T+=0.01
         print("温度:%f" % (self.T))
         print("開始剤:%f" % (self.init))
         delta_init=self.ki(self.T)*self.init
@@ -31,6 +33,9 @@ class Polymer_FFT:
         self.R[0]+=delta_init
         
         #反応する分子数を決める
+        #1step分の時間幅がどれくらいにできるかはkiとkd次第かな 1stepで残ってるモノマー以上に反応されたらやばい
+        #kdとktと連鎖移動からすべてのラジカルの行き先を決められるはず
+        #将来的には開始剤ごとにラジカルを発生・モノマーごとに反応量を決める
         SUM_M,SUM_R=sum(self.M),sum(self.R)
         x=1/2*(SUM_R/(SUM_M+SUM_R))#アタックを受けて殺されるラジカルの割合
         R_die=[x*self.R[i] for i in range(self.N)]
@@ -41,13 +46,13 @@ class Polymer_FFT:
         R_die_per=[R_die[i]/(SUM_R_die) for i in range(self.N)]
         print("R_die_per:%f" % (sum(R_die_per)))
 
-        #ここでB_dieとの整合性とれない？？？
         RtoM=[self.R[i]-R_die[i] for i in range(self.N)]
         RtoR=R_die[:]
 
-        #FFTする　これはそれぞれの生成を考えるときに使う？
+        #FFTする
         delta_P=(self.convolution(R_die_per,RtoR))
         delta_R=(self.convolution(M_per,RtoM))
+        #delta_R=[0]+RtoM[:-1]
 
         """
         dead_N=len(delta_P)-len(C)
@@ -66,14 +71,19 @@ class Polymer_FFT:
         print('ポリマー量:%f' % (sum([self.M[i]*i for i in range(self.N)])+sum([self.R[i]*i for i in range(self.N)])+sum([self.P[i]*i for i in range(self.N)])))
 
         print('残りモノマー数:%f' % (sum(self.M)))
+
+
+        return
+    
+    def display(self):
         fig=plt.figure()
         ax1=fig.add_subplot(1, 1, 1)
-        #ax2=ax1.twinx()
         ax1.plot([self.P[i]*i for i in range(self.N)])
         ax1.plot([self.R[i]*i for i in range(self.N)],color="red")
-        ax1.set_ylim(0,10000)
+        ax1.set_ylim(0,3000)
         ax1.set_xlim(0,self.N)
-        plt.show()        
+        plt.title("ki=%f,init=%i" %(self.ki(self.T),self.init_log))
+        plt.show()
 
         return
     
@@ -84,8 +94,8 @@ class Polymer_FFT:
             self.R=8.314
         
         def calc(self,T):#ki(T=180)とかできるように
-            return self.A*cmath.exp(-self.Ea/(self.R*(T+273.15))).real
-
+            #return self.A*cmath.exp(-self.Ea/(self.R*(T+273.15))).real
+            return 0.1
     def convolution(self, g, h):
         l = len(g) + len(h)
         n = 1 << l.bit_length()
@@ -123,9 +133,16 @@ class Polymer_FFT:
  
         return ret
 
-test=Polymer_FFT(10**3,2,160)
+test=Polymer_FFT(5*10**3,2,160)
 test.drop(10**6,10*10**3)
 
+count=0
 while True:
+    count+=1
     test.react(-1)
+    if test.M[1]<10**6/100:
+        test.display()
+        print("----終了----")
+        print(count)
+        break
 
